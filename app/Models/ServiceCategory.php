@@ -4,49 +4,60 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ServiceCategory extends Model
 {
     use HasFactory;
 
-    /**
-     * Imported database table name.
-     */
     protected $table = 'service_categories';
-
-    /**
-     * Primary key column.
-     */
-    protected $primaryKey = 'id';
 
     protected $fillable = [
         'name',
+        'platform',
+        'icon_url',
         'slug',
-        'description',
-        'icon',
-        'status',
         'sort_order',
+        'is_active',
     ];
 
-    protected function casts(): array
+    protected $casts = [
+        'id' => 'integer',
+        'sort_order' => 'integer',
+        'is_active' => 'boolean',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+    ];
+
+    /**
+     * Return only active categories.
+     */
+    public function scopeActive($query)
     {
-        return [
-            'id' => 'integer',
-            'status' => 'boolean',
-            'sort_order' => 'integer',
-        ];
+        return $query->where('is_active', true);
     }
 
     /**
-     * A service category contains many services.
+     * Services belonging to this category.
      */
-    public function services(): HasMany
+    public function services()
     {
         return $this->hasMany(
             Service::class,
-            'service_category_id',
+            'category_id',
             'id'
         );
     }
+
+    /**
+     * Only active services belonging to this category.
+     */
+    public function activeServices()
+    {
+        return $this->hasMany(
+            Service::class,
+            'category_id',
+            'id'
+        )->where('is_active', true);
+    }
 }
+

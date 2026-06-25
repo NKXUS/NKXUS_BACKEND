@@ -1,0 +1,297 @@
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\Service;
+use App\Models\ServiceCategory;
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
+
+class NkxusServiceCatalogSeeder extends Seeder
+{
+    private const QUANTITIES = [
+        50,
+        100,
+        250,
+        500,
+        1000,
+        2500,
+        5000,
+        10000,
+    ];
+
+    public function run(): void
+    {
+        $catalog = [
+            [
+                'name' => 'Instagram Likes',
+                'slug' => 'instagram-likes',
+                'platform' => 'Instagram',
+                'icon_url' => 'https://cdn-icons-png.flaticon.com/512/2111/2111463.png',
+                'high_quality_rate' => 80,
+                'premium_rate' => 120,
+            ],
+            [
+                'name' => 'Instagram Followers',
+                'slug' => 'instagram-followers',
+                'platform' => 'Instagram',
+                'icon_url' => 'https://cdn-icons-png.flaticon.com/512/2111/2111463.png',
+                'high_quality_rate' => 180,
+                'premium_rate' => 250,
+            ],
+            [
+                'name' => 'Instagram Comments',
+                'slug' => 'instagram-comments',
+                'platform' => 'Instagram',
+                'icon_url' => 'https://cdn-icons-png.flaticon.com/512/2111/2111463.png',
+                'high_quality_rate' => 300,
+                'premium_rate' => 450,
+            ],
+            [
+                'name' => 'Instagram Views',
+                'slug' => 'instagram-views',
+                'platform' => 'Instagram',
+                'icon_url' => 'https://cdn-icons-png.flaticon.com/512/2111/2111463.png',
+                'high_quality_rate' => 40,
+                'premium_rate' => 60,
+            ],
+
+            [
+                'name' => 'TikTok Likes',
+                'slug' => 'tiktok-likes',
+                'platform' => 'TikTok',
+                'icon_url' => null,
+                'high_quality_rate' => 100,
+                'premium_rate' => 150,
+            ],
+            [
+                'name' => 'TikTok Followers',
+                'slug' => 'tiktok-followers',
+                'platform' => 'TikTok',
+                'icon_url' => null,
+                'high_quality_rate' => 400,
+                'premium_rate' => 550,
+            ],
+            [
+                'name' => 'TikTok Views',
+                'slug' => 'tiktok-views',
+                'platform' => 'TikTok',
+                'icon_url' => null,
+                'high_quality_rate' => 70,
+                'premium_rate' => 100,
+            ],
+
+            [
+                'name' => 'YouTube Likes',
+                'slug' => 'youtube-likes',
+                'platform' => 'YouTube',
+                'icon_url' => 'https://cdn-icons-png.flaticon.com/512/1384/1384060.png',
+                'high_quality_rate' => 300,
+                'premium_rate' => 450,
+            ],
+            [
+                'name' => 'YouTube Subscribers',
+                'slug' => 'youtube-subscribers',
+                'platform' => 'YouTube',
+                'icon_url' => 'https://cdn-icons-png.flaticon.com/512/1384/1384060.png',
+                'high_quality_rate' => 950,
+                'premium_rate' => 1250,
+            ],
+            [
+                'name' => 'YouTube Views',
+                'slug' => 'youtube-views',
+                'platform' => 'YouTube',
+                'icon_url' => 'https://cdn-icons-png.flaticon.com/512/1384/1384060.png',
+                'high_quality_rate' => 150,
+                'premium_rate' => 220,
+            ],
+
+            [
+                'name' => 'LinkedIn Followers',
+                'slug' => 'linkedin-followers',
+                'platform' => 'LinkedIn',
+                'icon_url' => null,
+                'high_quality_rate' => 600,
+                'premium_rate' => 850,
+            ],
+            [
+                'name' => 'LinkedIn Likes & Reactions',
+                'slug' => 'linkedin-likes-reactions',
+                'platform' => 'LinkedIn',
+                'icon_url' => null,
+                'high_quality_rate' => 350,
+                'premium_rate' => 500,
+            ],
+            [
+                'name' => 'LinkedIn Connections',
+                'slug' => 'linkedin-connections',
+                'platform' => 'LinkedIn',
+                'icon_url' => null,
+                'high_quality_rate' => 700,
+                'premium_rate' => 950,
+            ],
+            [
+                'name' => 'LinkedIn Shares',
+                'slug' => 'linkedin-shares',
+                'platform' => 'LinkedIn',
+                'icon_url' => null,
+                'high_quality_rate' => 400,
+                'premium_rate' => 550,
+            ],
+            [
+                'name' => 'LinkedIn Video Post Views',
+                'slug' => 'linkedin-video-post-views',
+                'platform' => 'LinkedIn',
+                'icon_url' => null,
+                'high_quality_rate' => 150,
+                'premium_rate' => 220,
+            ],
+
+            [
+                'name' => 'Facebook Real Page Likes',
+                'slug' => 'facebook-real-page-likes',
+                'platform' => 'Facebook',
+                'icon_url' => null,
+                'high_quality_rate' => 350,
+                'premium_rate' => 500,
+            ],
+            [
+                'name' => 'Facebook Post Likes & Emotions',
+                'slug' => 'facebook-post-likes-emotions',
+                'platform' => 'Facebook',
+                'icon_url' => null,
+                'high_quality_rate' => 180,
+                'premium_rate' => 250,
+            ],
+            [
+                'name' => 'Facebook Promotional Video Views',
+                'slug' => 'facebook-promotional-video-views',
+                'platform' => 'Facebook',
+                'icon_url' => null,
+                'high_quality_rate' => 100,
+                'premium_rate' => 150,
+            ],
+            [
+                'name' => 'Facebook Promotional Comments',
+                'slug' => 'facebook-promotional-comments',
+                'platform' => 'Facebook',
+                'icon_url' => null,
+                'high_quality_rate' => 300,
+                'premium_rate' => 450,
+            ],
+            [
+                'name' => 'Facebook Followers',
+                'slug' => 'facebook-followers',
+                'platform' => 'Facebook',
+                'icon_url' => null,
+                'high_quality_rate' => 300,
+                'premium_rate' => 450,
+            ],
+            [
+                'name' => 'Facebook Shares',
+                'slug' => 'facebook-shares',
+                'platform' => 'Facebook',
+                'icon_url' => null,
+                'high_quality_rate' => 200,
+                'premium_rate' => 300,
+            ],
+        ];
+
+        DB::transaction(function () use ($catalog) {
+            /*
+             * Keep old services because existing orders reference them,
+             * but hide them from the frontend.
+             */
+            Service::query()->update([
+                'is_active' => false,
+            ]);
+
+            /*
+             * Hide categories that are not part of the required catalog,
+             * such as Telegram.
+             */
+            ServiceCategory::query()->update([
+                'is_active' => false,
+            ]);
+
+            foreach ($catalog as $index => $item) {
+                $category = ServiceCategory::query()
+                    ->where('platform', $item['platform'])
+                    ->where('name', $item['name'])
+                    ->first();
+
+                if (!$category) {
+                    $category = new ServiceCategory();
+                }
+
+                $category->fill([
+                    'name' => $item['name'],
+                    'platform' => $item['platform'],
+                    'icon_url' => $item['icon_url'],
+                    'slug' => $item['slug'],
+                    'sort_order' => $index + 1,
+                    'is_active' => true,
+                ]);
+
+                $category->save();
+
+                $this->createOrUpdateService(
+                    category: $category,
+                    name: $item['name'] . ' - High Quality',
+                    slug: $item['slug'] . '-high-quality',
+                    qualityType: 'high_quality',
+                    rate: $item['high_quality_rate'],
+                    avgTime: '1-24 hours',
+                    featured: false
+                );
+
+                $this->createOrUpdateService(
+                    category: $category,
+                    name: $item['name'] . ' - Premium',
+                    slug: $item['slug'] . '-premium',
+                    qualityType: 'premium',
+                    rate: $item['premium_rate'],
+                    avgTime: '1-12 hours',
+                    featured: true
+                );
+            }
+        });
+    }
+
+    private function createOrUpdateService(
+        ServiceCategory $category,
+        string $name,
+        string $slug,
+        string $qualityType,
+        float $rate,
+        string $avgTime,
+        bool $featured
+    ): void {
+        $service = Service::query()
+            ->where('slug', $slug)
+            ->first();
+
+        if (!$service) {
+            $service = new Service();
+        }
+
+        $service->fill([
+            'category_id' => $category->id,
+            'name' => $name,
+            'rate_per_1000' => $rate,
+            'min_order' => 50,
+            'max_order' => 10000,
+            'avg_time' => $avgTime,
+            'description' => $name . ' with reliable delivery.',
+            'platform' => $category->platform,
+            'is_active' => true,
+            'is_featured' => $featured,
+            'slug' => $slug,
+            'quality_type' => $qualityType,
+            'allowed_quantities' => self::QUANTITIES,
+        ]);
+
+        $service->save();
+    }
+}
+

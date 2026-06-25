@@ -13,10 +13,15 @@ class AuthController extends Controller
 {
     public function register(Request $request): JsonResponse
     {
+        $request->merge([
+            'email' => strtolower(
+                trim((string) $request->input('email'))
+            ),
+        ]);
+
         $validated = $request->validate([
             'email' => [
                 'required',
-                'string',
                 'email',
                 'max:255',
                 'unique:smmusers,email',
@@ -25,11 +30,12 @@ class AuthController extends Controller
                 'required',
                 'string',
                 'min:8',
+                'max:255',
             ],
         ]);
 
         $user = User::create([
-            'email' => strtolower(trim($validated['email'])),
+            'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
         ]);
 
@@ -47,11 +53,17 @@ class AuthController extends Controller
 
     public function login(Request $request): JsonResponse
     {
+        $request->merge([
+            'email' => strtolower(
+                trim((string) $request->input('email'))
+            ),
+        ]);
+
         $validated = $request->validate([
             'email' => [
                 'required',
-                'string',
                 'email',
+                'max:255',
             ],
             'password' => [
                 'required',
@@ -59,13 +71,17 @@ class AuthController extends Controller
             ],
         ]);
 
-        $email = strtolower(trim($validated['email']));
-
-        $user = User::where('email', $email)->first();
+        $user = User::where(
+            'email',
+            $validated['email']
+        )->first();
 
         if (
             !$user ||
-            !Hash::check($validated['password'], $user->password)
+            !Hash::check(
+                $validated['password'],
+                $user->password
+            )
         ) {
             throw ValidationException::withMessages([
                 'email' => [
@@ -83,7 +99,7 @@ class AuthController extends Controller
             'message' => 'Login successful.',
             'token' => $token,
             'user' => $user,
-        ], 200);
+        ]);
     }
 
     public function user(Request $request): JsonResponse
@@ -96,9 +112,11 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $request->user()
-            ->currentAccessToken()
-            ?->delete();
+        $token = $request->user()?->currentAccessToken();
+
+        if ($token) {
+            $token->delete();
+        }
 
         return response()->json([
             'success' => true,
@@ -108,9 +126,7 @@ class AuthController extends Controller
 
     public function logoutAll(Request $request): JsonResponse
     {
-        $request->user()
-            ->tokens()
-            ->delete();
+        $request->user()?->tokens()->delete();
 
         return response()->json([
             'success' => true,

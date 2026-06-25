@@ -4,39 +4,108 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Service;
+use App\Models\ServiceCategory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class ServiceController extends Controller
 {
     /**
-     * Display all services.
+     * Display active services.
+     *
+     * Available filters:
+     * GET /api/services
+     * GET /api/services?platform=Instagram
+     * GET /api/services?category_id=2
+     * GET /api/services?category=instagram-likes
+     * GET /api/services?quality_type=high_quality
+     * GET /api/services?is_featured=1
      */
     public function index(Request $request): JsonResponse
     {
         $services = Service::query()
+            ->active()
+            ->whereHas('category', function ($query) {
+                $query->where('is_active', true);
+            })
             ->with('category')
             ->when(
-                $request->filled('service_category_id'),
+                $request->filled('platform'),
                 function ($query) use ($request) {
                     $query->where(
-                        'service_category_id',
-                        $request->integer('service_category_id')
+                        'platform',
+                        $request->string('platform')->trim()->toString()
                     );
                 }
             )
             ->when(
-                $request->has('status'),
+                $request->filled('category_id'),
                 function ($query) use ($request) {
                     $query->where(
-                        'status',
-                        $request->boolean('status')
+                        'category_id',
+                        (int) $request->input('category_id')
                     );
                 }
             )
-            ->orderBy('service_category_id')
+            ->when(
+                $request->filled('category'),
+                function ($query) use ($request) {
+                    $identifier = $request
+                        ->string('category')
+                        ->trim()
+                        ->toString();
+
+                    $query->whereHas(
+                        'category',
+                        function ($categoryQuery) use ($identifier) {
+                            $categoryQuery->where(
+                                function ($identifierQuery) use ($identifier) {
+                                    $identifierQuery->where(
+                                        'slug',
+                                        $identifier
+                                    );
+
+                                    if (ctype_digit($identifier)) {
+                                        $identifierQuery->orWhere(
+                                            'id',
+                                            (int) $identifier
+                                        );
+                                    }
+                                }
+                            );
+                        }
+                    );
+                }
+            )
+            ->when(
+                $request->filled('quality_type'),
+                function ($query) use ($request) {
+                    $query->where(
+                        'quality_type',
+                        $request->string('quality_type')->trim()->toString()
+                    );
+                }
+            )
+            ->when(
+                $request->has('is_featured'),
+                function ($query) use ($request) {
+                    $query->where(
+                        'is_featured',
+                        $request->boolean('is_featured')
+                    );
+                }
+            )
+            ->orderBy('category_id')
+            ->orderByRaw("
+                CASE quality_type
+                    WHEN 'high_quality' THEN 1
+                    WHEN 'premium' THEN 2
+                    ELSE 3
+                END
+            ")
             ->orderBy('name')
             ->get();
 
@@ -48,111 +117,199 @@ class ServiceController extends Controller
     }
 
     /**
-     * Create a new service.
+     * Store a new service.
      */
     public function store(Request $request): JsonResponse
     {
-        $generatedSlug = Str::slug(
-            $request->input('slug') ?: $request->input('name', '')
-        );
-
-        $request->merge([
-            'slug' => $generatedSlug,
-        ]);
-
         $validated = $request->validate([
-            'service_category_id' => [
+            'category_id' => [
                 'required',
                 'integer',
-                'exists:service_categories,id',
+                Rule::exists('service_categories', 'id'),
             ],
 
             'name' => [
                 'required',
                 'string',
-                'max:150',
+                'max:255',
             ],
 
             'slug' => [
-                'required',
-                'string',
-                'max:180',
-                'unique:services,slug',
-            ],
-
-            'description' => [
                 'nullable',
                 'string',
-                'max:5000',
-            ],
-
-            'minimum_quantity' => [
-                'required',
-                'integer',
-                'min:1',
-            ],
-
-            'maximum_quantity' => [
-                'required',
-                'integer',
-                'gte:minimum_quantity',
+                'max:191',
+                Rule::unique('services', 'slug'),
             ],
 
             'rate_per_1000' => [
                 'required',
                 'numeric',
-                'min:0',
+                'min:0.01',
             ],
 
-            'old_price' => [
+            'min_order' => [
                 'nullable',
-                'numeric',
-                'min:0',
+                'integer',
+                Rule::in(Service::DEFAULT_QUANTITIES),
             ],
 
-            'delivery_time' => [
+            'max_order' => [
                 'nullable',
-                'string',
-                'max:100',
+                'integer',
+                Rule::in(Service::DEFAULT_QUANTITIES),
             ],
 
-            'quality' => [
-                'nullable',
-                'string',
-                'max:100',
-            ],
-
-            'provider_service_id' => [
+            'avg_time' => [
                 'nullable',
                 'string',
-                'max:100',
+                'max:255',
             ],
 
-            'status' => [
+            'description' => [
+                'nullable',
+                'string',
+            ],
+
+            'quality_type' => [
+                'required',
+                Rule::in([
+                    'high_quality',
+                    'premium',
+                ]),
+            ],
+
+            'allowed_quantities' => [
+                'nullable',
+                'array',
+                'min:1',
+            ],
+
+            'allowed_quantities.*' => [
+                'required',
+                'integer',
+                Rule::in(Service::DEFAULT_QUANTITIES),
+            ],
+
+            'is_active' => [
+                'nullable',
+                'boolean',
+            ],
+
+            'is_featured' => [
                 'nullable',
                 'boolean',
             ],
         ]);
 
-        $validated['status'] = $validated['status'] ?? true;
+        $category = ServiceCategory::query()
+            ->active()
+            ->find($validated['category_id']);
 
-        $service = Service::create($validated);
+        if (!$category) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The selected category is inactive or does not exist.',
+            ], 422);
+        }
 
-        $service->load('category');
+        $minimumQuantity = (int) (
+            $validated['min_order'] ?? 50
+        );
+
+        $maximumQuantity = (int) (
+            $validated['max_order'] ?? 10000
+        );
+
+        if ($minimumQuantity > $maximumQuantity) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Minimum order cannot be greater than maximum order.',
+            ], 422);
+        }
+
+        $allowedQuantities = $validated['allowed_quantities']
+            ?? Service::DEFAULT_QUANTITIES;
+
+        $allowedQuantities = $this->prepareAllowedQuantities(
+            $allowedQuantities,
+            $minimumQuantity,
+            $maximumQuantity
+        );
+
+        if (empty($allowedQuantities)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'At least one allowed quantity is required.',
+            ], 422);
+        }
+
+        $slug = $validated['slug']
+            ?? Str::slug($validated['name']);
+
+        $slug = $this->createUniqueSlug($slug);
+
+        $service = DB::transaction(function () use (
+            $validated,
+            $category,
+            $minimumQuantity,
+            $maximumQuantity,
+            $allowedQuantities,
+            $slug
+        ) {
+            return Service::create([
+                'category_id' => $category->id,
+                'name' => $validated['name'],
+                'rate_per_1000' => $validated['rate_per_1000'],
+                'min_order' => $minimumQuantity,
+                'max_order' => $maximumQuantity,
+                'avg_time' => $validated['avg_time'] ?? null,
+                'description' => $validated['description'] ?? null,
+                'platform' => $category->platform,
+                'is_active' => $validated['is_active'] ?? true,
+                'is_featured' => $validated['is_featured'] ?? false,
+                'slug' => $slug,
+                'quality_type' => $validated['quality_type'],
+                'allowed_quantities' => $allowedQuantities,
+            ]);
+        });
 
         return response()->json([
             'success' => true,
             'message' => 'Service created successfully.',
-            'data' => $service,
+            'data' => $service->load('category'),
         ], 201);
     }
 
     /**
-     * Display one service.
+     * Display one active service.
+     *
+     * Identifier can be:
+     * - Service ID
+     * - Service slug
      */
-    public function show(Service $service): JsonResponse
+    public function show(string $identifier): JsonResponse
     {
-        $service->load('category');
+        $service = Service::query()
+            ->active()
+            ->whereHas('category', function ($query) {
+                $query->where('is_active', true);
+            })
+            ->where(function ($query) use ($identifier) {
+                $query->where('slug', $identifier);
+
+                if (ctype_digit($identifier)) {
+                    $query->orWhere('id', (int) $identifier);
+                }
+            })
+            ->with('category')
+            ->first();
+
+        if (!$service) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Service not found.',
+            ], 404);
+        }
 
         return response()->json([
             'success' => true,
@@ -162,149 +319,319 @@ class ServiceController extends Controller
     }
 
     /**
-     * Update a service.
+     * Update an existing service.
      */
     public function update(
         Request $request,
         Service $service
     ): JsonResponse {
-        if ($request->has('name') || $request->has('slug')) {
-            $generatedSlug = Str::slug(
-                $request->input('slug')
-                ?: $request->input('name', $service->name)
-            );
-
-            $request->merge([
-                'slug' => $generatedSlug,
-            ]);
-        }
-
         $validated = $request->validate([
-            'service_category_id' => [
+            'category_id' => [
                 'sometimes',
                 'required',
                 'integer',
-                'exists:service_categories,id',
+                Rule::exists('service_categories', 'id'),
             ],
 
             'name' => [
                 'sometimes',
                 'required',
                 'string',
-                'max:150',
+                'max:255',
             ],
 
             'slug' => [
                 'sometimes',
-                'required',
-                'string',
-                'max:180',
-                Rule::unique('services', 'slug')
-                    ->ignore($service->id),
-            ],
-
-            'description' => [
-                'sometimes',
                 'nullable',
                 'string',
-                'max:5000',
-            ],
-
-            'minimum_quantity' => [
-                'sometimes',
-                'required',
-                'integer',
-                'min:1',
-            ],
-
-            'maximum_quantity' => [
-                'sometimes',
-                'required',
-                'integer',
-                'min:1',
+                'max:191',
+                Rule::unique('services', 'slug')
+                    ->ignore($service->id),
             ],
 
             'rate_per_1000' => [
                 'sometimes',
                 'required',
                 'numeric',
-                'min:0',
+                'min:0.01',
             ],
 
-            'old_price' => [
+            'min_order' => [
                 'sometimes',
-                'nullable',
-                'numeric',
-                'min:0',
+                'integer',
+                Rule::in(Service::DEFAULT_QUANTITIES),
             ],
 
-            'delivery_time' => [
+            'max_order' => [
                 'sometimes',
-                'nullable',
-                'string',
-                'max:100',
+                'integer',
+                Rule::in(Service::DEFAULT_QUANTITIES),
             ],
 
-            'quality' => [
-                'sometimes',
-                'nullable',
-                'string',
-                'max:100',
-            ],
-
-            'provider_service_id' => [
+            'avg_time' => [
                 'sometimes',
                 'nullable',
                 'string',
-                'max:100',
+                'max:255',
             ],
 
-            'status' => [
+            'description' => [
+                'sometimes',
+                'nullable',
+                'string',
+            ],
+
+            'quality_type' => [
+                'sometimes',
+                'required',
+                Rule::in([
+                    'high_quality',
+                    'premium',
+                ]),
+            ],
+
+            'allowed_quantities' => [
+                'sometimes',
+                'array',
+                'min:1',
+            ],
+
+            'allowed_quantities.*' => [
+                'required',
+                'integer',
+                Rule::in(Service::DEFAULT_QUANTITIES),
+            ],
+
+            'is_active' => [
+                'sometimes',
+                'boolean',
+            ],
+
+            'is_featured' => [
                 'sometimes',
                 'boolean',
             ],
         ]);
 
-        $minimumQuantity = $validated['minimum_quantity']
-            ?? $service->minimum_quantity;
+        $categoryId = $validated['category_id']
+            ?? $service->category_id;
 
-        $maximumQuantity = $validated['maximum_quantity']
-            ?? $service->maximum_quantity;
+        $category = ServiceCategory::query()
+            ->find($categoryId);
 
-        if ($maximumQuantity < $minimumQuantity) {
+        if (!$category) {
             return response()->json([
-                'message' => 'The maximum quantity must be greater than or equal to the minimum quantity.',
-                'errors' => [
-                    'maximum_quantity' => [
-                        'The maximum quantity must be greater than or equal to the minimum quantity.',
-                    ],
-                ],
+                'success' => false,
+                'message' => 'The selected category does not exist.',
             ], 422);
         }
 
-        $service->update($validated);
+        $minimumQuantity = (int) (
+            $validated['min_order']
+            ?? $service->min_order
+        );
 
-        $updatedService = $service
-            ->fresh()
-            ->load('category');
+        $maximumQuantity = (int) (
+            $validated['max_order']
+            ?? $service->max_order
+        );
+
+        if ($minimumQuantity > $maximumQuantity) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Minimum order cannot be greater than maximum order.',
+            ], 422);
+        }
+
+        $allowedQuantities = array_key_exists(
+            'allowed_quantities',
+            $validated
+        )
+            ? $validated['allowed_quantities']
+            : $service->quantity_options;
+
+        $allowedQuantities = $this->prepareAllowedQuantities(
+            $allowedQuantities,
+            $minimumQuantity,
+            $maximumQuantity
+        );
+
+        if (empty($allowedQuantities)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'At least one allowed quantity is required.',
+            ], 422);
+        }
+
+        if (array_key_exists('slug', $validated)) {
+            $newSlug = $validated['slug'];
+
+            if (blank($newSlug)) {
+                $newSlug = Str::slug(
+                    $validated['name'] ?? $service->name
+                );
+            }
+
+            $validated['slug'] = $this->createUniqueSlug(
+                $newSlug,
+                $service->id
+            );
+        }
+
+        DB::transaction(function () use (
+            $service,
+            $validated,
+            $category,
+            $minimumQuantity,
+            $maximumQuantity,
+            $allowedQuantities
+        ) {
+            $service->update([
+                'category_id' => $category->id,
+
+                'name' => $validated['name']
+                    ?? $service->name,
+
+                'rate_per_1000' => $validated['rate_per_1000']
+                    ?? $service->rate_per_1000,
+
+                'min_order' => $minimumQuantity,
+
+                'max_order' => $maximumQuantity,
+
+                'avg_time' => array_key_exists(
+                    'avg_time',
+                    $validated
+                )
+                    ? $validated['avg_time']
+                    : $service->avg_time,
+
+                'description' => array_key_exists(
+                    'description',
+                    $validated
+                )
+                    ? $validated['description']
+                    : $service->description,
+
+                'platform' => $category->platform,
+
+                'is_active' => $validated['is_active']
+                    ?? $service->is_active,
+
+                'is_featured' => $validated['is_featured']
+                    ?? $service->is_featured,
+
+                'slug' => $validated['slug']
+                    ?? $service->slug,
+
+                'quality_type' => $validated['quality_type']
+                    ?? $service->quality_type,
+
+                'allowed_quantities' => $allowedQuantities,
+            ]);
+        });
 
         return response()->json([
             'success' => true,
             'message' => 'Service updated successfully.',
-            'data' => $updatedService,
+            'data' => $service
+                ->fresh()
+                ->load('category'),
         ]);
     }
 
     /**
-     * Delete a service.
+     * Delete a service only when it has no connected orders.
      */
     public function destroy(Service $service): JsonResponse
     {
-        $service->delete();
+        if ($service->orders()->exists()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This service has connected orders. Set is_active to false instead of deleting it.',
+            ], 422);
+        }
+
+        DB::transaction(function () use ($service) {
+            $service->delete();
+        });
 
         return response()->json([
             'success' => true,
             'message' => 'Service deleted successfully.',
         ]);
     }
+
+    /**
+     * Validate, sort and filter allowed quantities.
+     */
+    private function prepareAllowedQuantities(
+        array $quantities,
+        int $minimumQuantity,
+        int $maximumQuantity
+    ): array {
+        $quantities = array_map(
+            'intval',
+            $quantities
+        );
+
+        $quantities = array_filter(
+            $quantities,
+            function (int $quantity) use (
+                $minimumQuantity,
+                $maximumQuantity
+            ) {
+                return in_array(
+                    $quantity,
+                    Service::DEFAULT_QUANTITIES,
+                    true
+                )
+                    && $quantity >= $minimumQuantity
+                    && $quantity <= $maximumQuantity;
+            }
+        );
+
+        $quantities = array_values(
+            array_unique($quantities)
+        );
+
+        sort($quantities);
+
+        return $quantities;
+    }
+
+    /**
+     * Generate a unique service slug.
+     */
+    private function createUniqueSlug(
+        string $slug,
+        ?int $ignoreId = null
+    ): string {
+        $baseSlug = Str::slug($slug);
+
+        if ($baseSlug === '') {
+            $baseSlug = 'service';
+        }
+
+        $finalSlug = $baseSlug;
+        $counter = 1;
+
+        while (
+            Service::query()
+                ->when(
+                    $ignoreId !== null,
+                    function ($query) use ($ignoreId) {
+                        $query->where('id', '!=', $ignoreId);
+                    }
+                )
+                ->where('slug', $finalSlug)
+                ->exists()
+        ) {
+            $finalSlug = $baseSlug . '-' . $counter;
+            $counter++;
+        }
+
+        return $finalSlug;
+    }
 }
+

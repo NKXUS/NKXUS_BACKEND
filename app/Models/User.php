@@ -9,38 +9,29 @@ use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasApiTokens;
-    use HasFactory;
-    use Notifiable;
+    use HasApiTokens, HasFactory, Notifiable;
 
-    /**
-     * Imported database table.
-     */
     protected $table = 'smmusers';
 
-    /**
-     * Primary key column.
-     */
-    protected $primaryKey = 'id';
-
-    /**
-     * The smmusers table contains only:
-     * id, email and password.
-     */
-    public $timestamps = false;
-
-    /**
-     * Fields allowed during registration.
-     */
     protected $fillable = [
         'email',
         'password',
     ];
 
-    /**
-     * Hide password from API responses.
-     */
     protected $hidden = [
         'password',
+        'api_key',
+        'api_token',
+        'remember_token',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'balance' => 'decimal:2',
+            'two_fa_enabled' => 'boolean',
+            'created_at' => 'datetime',
+            'updated_at' => 'datetime',
+        ];
+    }
 }
